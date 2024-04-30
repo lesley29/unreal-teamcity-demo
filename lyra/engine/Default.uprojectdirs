@@ -1,0 +1,57 @@
+; These folders were be searched 1 level deep in order to find projects
+; UnrealBuildTool will store the following information:
+; - Project name
+; - Location of project
+; - Whether it has code or not
+; - TargetNames contains at the project location
+;
+./
+Collaboration
+Collaboration/Frosty
+Collaboration/Knockout
+Collaboration/MotionMatching
+Collaboration/Opal
+Engine/Programs/
+Engine/Restricted/NotForLicensees/Programs/
+Engine/Source/
+Enterprise/
+Enterprise/Samples
+Enterprise/Templates
+Prototypes/
+Samples/
+Samples/Apps
+Samples/AR
+Samples/Compositing
+Samples/Games
+Samples/NotForLicensees
+Samples/Quixel
+Samples/Showcases
+Samples/UserContent
+Sandbox/
+Sandbox/AI
+Sandbox/Anim
+Sandbox/Audio
+Sandbox/Core
+Sandbox/Demos
+Sandbox/DevRel
+Sandbox/DevTools
+Sandbox/DigitalHuman
+Sandbox/Enterprise
+Sandbox/Evangelism
+Sandbox/Gameplay
+Sandbox/HMI
+Sandbox/LDModeling
+Sandbox/LDModeling/TexturingTools
+Sandbox/MachineLearning
+Sandbox/MediaPlayer
+Sandbox/Mobile
+Sandbox/Physics
+Sandbox/Rendering
+Sandbox/UE
+Sandbox/UISystems
+Sandbox/UISystems/MVVMProto
+Sandbox/VirtualProduction
+Sandbox/vkFrameworkTestbed
+Sandbox/Worldbuilding/
+Sandbox/XR
+Templates

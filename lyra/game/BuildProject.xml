@@ -1,0 +1,212 @@
+<?xml version='1.0' ?>
+<BuildGraph xmlns="http://www.epicgames.com/BuildGraph" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.epicgames.com/BuildGraph ./Schema.xsd" >
+
+    <Option Name="AgentPrefixCompile" DefaultValue="Compile" Description="The prefix to use when defining agents that use compile type nodes." />
+    <Option Name="AgentPrefixCook" DefaultValue="Cook" Description="The prefix to use when defining agents that use cook type nodes." />
+
+    <Property Name="MacAgentType" Value="Mac" />
+    <Property Name="WinAgentType" Value="Win" />
+    <Property Name="LinuxAgentType" Value="Linux" />
+
+    <Property Name="MacCompiler" Value="$(AgentPrefixCompile)$(MacAgentType)" />
+    <Property Name="WinCompiler" Value="$(AgentPrefixCompile)$(WinAgentType)" />
+    <Property Name="LinuxCompiler" Value="$(AgentPrefixCompile)$(LinuxAgentType)" />
+
+    <Option Name="ProjectName" DefaultValue="None" Restrict=".+" Description="Name of Project" />
+    <Option Name="ProjectPath" DefaultValue="$(ProjectName)" Restrict=".+" Description="Path to the folder that contains your project" />
+    <Property Name="UProject" Value="$(ProjectPath)/$(ProjectName).uproject" />
+
+    <Option Name="ExtraToolCompileArguments" DefaultValue="" Restrict="" Description="Extra arguments to use when building the tools" />
+    <Option Name="ExtraEditorCompileArguments" DefaultValue="" Restrict="" Description="Extra arguments to use when building the editor" />
+    <Option Name="ExtraProjectCompileArguments" DefaultValue="" Restrict="" Description="Extra arguments to use when building client and server" />
+
+    <Option Name="ClientPlatforms" DefaultValue="Win64+Mac+Linux" Description="A list of client platforms to build. PS4+XSX etc"/>
+    <Option Name="ServerPlatforms" DefaultValue="Win64+Mac+Linux" Description="A list of server platforms to build. PS4+XSX etc"/>
+    <Option Name="EditorPlatforms" DefaultValue="Win64+Mac+Linux" Description="Editor platforms to build to cook targets" />
+
+    <Option Name="TargetConfigurations" DefaultValue="" Description="Configuration(s) to build"/>
+
+    <Property Name="BuildNodes" Value="" />
+
+    <Property Name="ToolsNodeName" Value="Compile Tools" />
+    <Property Name="EditorNodeName" Value="Compile Editor" />
+
+    <!-- Editors -->
+    <ForEach Name="Platform" Values="$(EditorPlatforms)" Separator="+">
+        <Property Name="Compiler" Value="$(AgentPrefixCompile)$(Platform)" />
+
+        <Agent Name="Build Editor and tools $(Platform)" Type="$(Compiler)">
+
+            <Node Name="Setup Toolchain $(Platform)">
+                <Spawn Exe="Engine/Build/BatchFiles/Linux/Setup.sh" If="'$(Platform)' == 'Linux'"/>
+                <Spawn Exe="Engine/Build/BatchFiles/Linux/SetupToolchain.sh" If="'$(Platform)' == 'Linux'"/>
+                <Spawn Exe="mkdir" Arguments="-p Engine/Programs/AutomationTool/Saved/Logs" If="'$(Platform)' != 'Win64'"/>
+            </Node>
+
+            <Property Name="ExtraToolCompileArguments" Value="$(ExtraToolCompileArguments) -architecture=arm64" If="'$(Platform)' == 'Mac'" />
+
+            <Node Name="$(ToolsNodeName) $(Platform)" Requires="Setup Toolchain $(Platform)" Produces="#$(Platform)ToolBinaries">
+                <Compile Target="CrashReportClient" Platform="$(Platform)" Configuration="Shipping" Arguments="$(ExtraToolCompileArguments)" Tag="#$(Platform)ToolBinaries"/>
+                <Compile Target="CrashReportClientEditor" Platform="$(Platform)" Configuration="Shipping" Arguments="$(ExtraToolCompileArguments)" Tag="#$(Platform)ToolBinaries"/>
+                <Compile Target="ShaderCompileWorker" Platform="$(Platform)" Configuration="Development" Arguments="$(ExtraToolCompileArguments)" Tag="#$(Platform)ToolBinaries"/>
+                <Compile Target="UnrealLightmass" Platform="$(Platform)" Configuration="Development" Tag="#$(Platform)ToolBinaries"/>
+                <Compile Target="InterchangeWorker" Platform="$(Platform)" Configuration="Development" Arguments="$(ExtraToolCompileArguments)" Tag="#$(Platform)ToolBinaries"/>
+                <Compile Target="UnrealPak" Platform="$(Platform)" Configuration="Development" Arguments="$(ExtraToolCompileArguments)" Tag="#$(Platform)ToolBinaries"/>
+                <Compile Target="BootstrapPackagedGame" Platform="$(Platform)" Configuration="Shipping" Arguments="$(ExtraToolCompileArguments)" Tag="#$(Platform)ToolBinaries" If="'$(Platform)' == 'Win64'"/>
+            </Node>
+
+            <Property Name="ExtraEditorCompileArguments" Value="$(ExtraEditorCompileArguments) -architecture=arm64" If="'$(Platform)' == 'Mac'" />
+
+            <Node Name="$(EditorNodeName) $(Platform)" Requires="$(ToolsNodeName) $(Platform)" Produces="#$(Platform)EditorBinaries">
+                <Compile Target="$(ProjectName)Editor" Project="$(UProject)" Platform="$(Platform)" Configuration="Development" Arguments="$(ExtraEditorCompileArguments)" Tag="#$(Platform)EditorBinaries"/>
+            </Node>
+
+            <Property Name="AutomationTestsNodeName" Value="Run Tests $(Platform)" />
+            <Node Name="$(AutomationTestsNodeName)" Requires="$(EditorNodeName) $(Platform)">
+                <Property Name="TestArgs" Value="-Project=$(UProject) -NullRHI -Deterministic" />
+                <Property Name="TestArgs" Value="$(TestArgs) -Test=UE.EditorAutomation -RunTest=&quot;StartsWith:Input&quot;" />
+                <Property Name="TestArgs" Value="$(TestArgs) -Build=Editor -UseEditor" />
+                <Command Name="RunUnreal" Arguments="$(TestArgs)" />
+            </Node>
+        </Agent>
+
+        <Property Name="BuildNodes" Value="$(BuildNodes);$(EditorNodeName) $(Platform);$(AutomationTestsNodeName);" />
+    </ForEach>
+
+    <!-- CLIENT -->
+    <ForEach Name="Platform" Values="$(ClientPlatforms)" Separator="+">
+        <!-- COMPILATION -->
+        <Property Name="Compiler" Value="$(AgentPrefixCompile)$(Platform)" />
+        <Agent Name="Compile $(Platform) Client" Type="$(Compiler)">
+
+            <Property Name="CompileNodeName" Value="Compile $(Platform) Client" />
+            <Node Name="$(CompileNodeName)" Requires="$(ToolsNodeName) $(Platform)" Produces="#$(Platform) Client Binaries">
+                <ForEach Name="TargetConfiguration" Values="$(TargetConfigurations)" Separator="+">
+                    <Compile Target="$(ProjectName)Client" Project="$(UProject)" Platform="$(Platform)" Configuration="$(TargetConfiguration)" Arguments="$(ExtraProjectCompileArguments)" />
+                </ForEach>
+            </Node>
+
+            <Property Name="BuildNodes" Value="$(BuildNodes);$(CompileNodeName);" />
+        </Agent>
+
+        <!-- COOKING -->
+        <Property Name="Cooker" Value="$(AgentPrefixCook)$(Platform)" />
+
+        <Property Name="CookPlatformNodeName" Value="Cook $(Platform) Client" />
+        <Agent Name="Cook $(Platform) Client" Type="$(Cooker)">
+            <Property Name="CookPlatform" Value="$(Platform)" />
+            <Property Name="CookPlatform" Value="Windows" If="'$(Platform)' == 'Win64'" />
+
+            <Node Name="$(CookPlatformNodeName)" Requires="$(EditorNodeName) $(Platform)" Produces="#Cook $(Platform) Client Complete">
+                <Cook Project="$(UProject)" Platform="$(CookPlatform)Client"/>
+            </Node>
+        </Agent>
+
+        <Property Name="BuildNodes" Value="$(BuildNodes);$(CookPlatformNodeName);" />
+
+        <!-- PACKAGING -->
+        <Agent Name="Package $(Platform) Client" Type="$(Platform)">
+            <Property Name="BCRArgs" Value="-Project='$(UProject)' -Platform=$(Platform) -NoCodeSign -Client" />
+
+            <!-- Stage -->
+            <Node Name="Stage $(Platform) Client" Requires="Compile $(Platform) Client;Cook $(Platform) Client">
+                <ForEach Name="TargetConfiguration" Values="$(TargetConfigurations)" Separator="+">
+                    <Command Name="BuildCookRun" Arguments="$(BCRArgs) -Configuration=$(TargetConfiguration) -SkipBuild -SkipCook -Stage -Pak" />
+                </ForEach>
+            </Node>
+
+            <!-- Package -->
+            <Node Name="Package $(Platform) Client" Requires="Stage $(Platform) Client">
+                <ForEach Name="TargetConfiguration" Values="$(TargetConfigurations)" Separator="+">
+                    <Command Name="BuildCookRun" Arguments="$(BCRArgs) -Configuration=$(TargetConfiguration) -SkipBuild -SkipCook -SkipStage -Package" />
+                </ForEach>
+                <!-- -WaitForDebugger -->
+            </Node>
+
+            <!-- Publish (Packages) -->
+            <Node Name="Archive $(Platform) Client" Requires="Package $(Platform) Client">
+                <ForEach Name="TargetConfiguration" Values="$(TargetConfigurations)" Separator="+">
+                    <Command Name="BuildCookRun" Arguments="$(BCRArgs) -Configuration=$(TargetConfiguration) -SkipBuild -SkipCook -SkipStage -SkipPak -SkipPackage -Archive" />
+                </ForEach>
+            </Node>
+
+            <Node Name="Publish $(Platform) Client" Requires="Archive $(Platform) Client">
+                <Property Name="PublishPlatform" Value="$(Platform)" />
+                <Property Name="PublishPlatform" Value="Windows" If="'$(Platform)' == 'Win64'" />
+                <Log Message="##teamcity[publishArtifacts 'game/ArchivedBuilds/$(PublishPlatform)Client=>$(PublishPlatform)Client.zip']" />
+            </Node>
+        </Agent>
+
+        <Property Name="BuildNodes" Value="$(BuildNodes);Archive $(Platform) Client;Publish $(Platform) Client" />
+    </ForEach>
+
+    <!-- SERVER -->
+    <ForEach Name="Platform" Values="$(ServerPlatforms)" Separator="+">
+        <!-- COMPILATION -->
+        <Property Name="Compiler" Value="$(AgentPrefixCompile)$(Platform)" />
+        <Agent Name="Compile $(Platform) Server" Type="$(Compiler)">
+
+            <Property Name="CompileNodeName" Value="Compile $(Platform) Server" />
+            <Node Name="$(CompileNodeName)" Requires="$(ToolsNodeName) $(Platform)" Produces="#$(CompileNodeName) Server Binaries">
+                <ForEach Name="Configuration" Values="$(TargetConfigurations)" Separator="+">
+                    <Compile Target="$(ProjectName)Server" Project="$(UProject)" Platform="$(Platform)" Configuration="$(Configuration)" Arguments="$(ExtraProjectCompileArguments)" />
+                </ForEach>
+            </Node>
+
+            <Property Name="BuildNodes" Value="$(BuildNodes);$(CompileNodeName)" />
+        </Agent>
+
+        <!-- COOKING -->
+        <Property Name="Cooker" Value="$(AgentPrefixCook)$(Platform)" />
+
+        <Property Name="CookPlatformNodeName" Value="Cook $(Platform) Server" />
+        <Agent Name="Cook $(Platform) Server" Type="$(Cooker)">
+            <Property Name="CookPlatform" Value="$(Platform)" />
+            <Property Name="CookPlatform" Value="Windows" If="'$(Platform)' == 'Win64'" />
+
+            <Node Name="$(CookPlatformNodeName)" Requires="$(EditorNodeName) $(Platform)" Produces="#Cook $(Platform) Server Complete">
+                <Cook Project="$(UProject)" Platform="$(CookPlatform)Server"/>
+            </Node>
+        </Agent>
+
+        <Property Name="BuildNodes" Value="$(BuildNodes);$(CookPlatformNodeName);" />
+
+        <!-- PACKAGING -->
+        <Agent Name="Package $(Platform) Server" Type="$(Platform)">
+            <Property Name="BCRArgs" Value="-Project='$(UProject)' -Platform=$(Platform) -NoCodeSign -Server -NoClient" />
+
+            <!-- Stage -->
+            <Node Name="Stage $(Platform) Server" Requires="Compile $(Platform) Server;Cook $(Platform) Server">
+                <ForEach Name="TargetConfiguration" Values="$(TargetConfigurations)" Separator="+">
+                    <Command Name="BuildCookRun" Arguments="$(BCRArgs) -Configuration=$(TargetConfiguration) -SkipBuild -SkipCook -Stage -Pak" />
+                </ForEach>
+            </Node>
+
+            <!-- Package -->
+            <Node Name="Package $(Platform) Server" Requires="Stage $(Platform) Server">
+                <ForEach Name="TargetConfiguration" Values="$(TargetConfigurations)" Separator="+">
+                    <Command Name="BuildCookRun" Arguments="$(BCRArgs) -Configuration=$(TargetConfiguration) -SkipBuild -SkipCook -SkipStage -Package" />
+                </ForEach>
+                <!-- -WaitForDebugger -->
+            </Node>
+
+            <!-- Publish (Packages) -->
+            <Node Name="Archive $(Platform) Server" Requires="Package $(Platform) Server">
+                <ForEach Name="TargetConfiguration" Values="$(TargetConfigurations)" Separator="+">
+                    <Command Name="BuildCookRun" Arguments="$(BCRArgs) -Configuration=$(TargetConfiguration) -SkipBuild -SkipCook -SkipStage -SkipPak -SkipPackage -Archive" />
+                </ForEach>
+            </Node>
+
+            <Node Name="Publish $(Platform) Server" Requires="Archive $(Platform) Server">
+                <Property Name="PublishPlatform" Value="$(Platform)" />
+                <Property Name="PublishPlatform" Value="Windows" If="'$(Platform)' == 'Win64'" />
+                <Log Message="##teamcity[publishArtifacts 'game/ArchivedBuilds/$(PublishPlatform)Server=>$(PublishPlatform)Server.zip']" />
+            </Node>
+        </Agent>
+
+        <Property Name="BuildNodes" Value="$(BuildNodes);Archive $(Platform) Server;Publish $(Platform) Server" />
+    </ForEach>
+
+    <Aggregate Name="BuildProject" Requires="$(BuildNodes)" />
+
+</BuildGraph>
