@@ -1,0 +1,22 @@
+/.idea/
+
+.vs
+*.blend1
+*.fbx
+
+# Ignore all Intermediate and Saved directories
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Packaged/
+Saved/
+ArchivedBuilds/
+
+
+*/obj/*
+*/fbx/*
+*/psd/*
+
+*.log
+.DS_Store
