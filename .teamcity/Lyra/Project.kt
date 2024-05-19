@@ -10,7 +10,7 @@ object LyraGameVcs : PerforceVcsRoot({
     id("LyraVcs".toId())
     name = "LyraGame"
     port = "ssl:127.0.0.1:1666" // specify the correct address of your P4 server
-    stream {
+    mode = stream {
         streamName = "//Lyra/game" // specify the appropriate stream
     }
     // specify your credentials
